@@ -14,7 +14,9 @@ typedef QJsonObject EmbeddingJsonObject;
 
 #define EmbeddingDim 1024
 static constexpr char kSystemAssistantKey[] { "SystemAssistant" };
+static constexpr char kGrandVectorSearch[] { "GrandVectorSearch" };
 
+// DB
 static constexpr char kEmbeddingDBMetaDataTable[] { "embedding_metadata" };
 static constexpr char kEmbeddingDBIndexSegTable[] { "index_segment" };
 static constexpr char kEmbeddingDBMetaDataTableID[] { "id" };
@@ -22,15 +24,12 @@ static constexpr char kEmbeddingDBMetaDataTableSource[] { "source" };
 static constexpr char kEmbeddingDBMetaDataTableContent[] { "content" };
 
 //index define
-static constexpr char kFaissIndexPath[] { "/FaissIndexes" };
-
 static constexpr char kFaissFlatIndex[] { "Flat" };
 static constexpr char kFaissIvfFlatIndex[] { "IvfFlat" };
 static constexpr char kFaissIvfPQIndex[] { "IvfPQ" };
 
 //embedding define
 static constexpr int kMaxChunksSize = 300;
-static constexpr char kDataInfo[] { "/DataInfo.json" };
 
 //文档分块后的存储结构
 struct Document {

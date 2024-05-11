@@ -33,6 +33,10 @@ void EmbeddingWorkerPrivate::init()
     //embedding、向量索引
     embedder = new Embedding(this);
     indexer = new VectorIndex(this);
+
+    connect(indexer, &VectorIndex::indexDump, embedder, &Embedding::onIndexDump);
+
+    initGrandSearchIndex();
 }
 
 bool EmbeddingWorkerPrivate::enableEmbedding(const QString &file)
@@ -205,6 +209,39 @@ QStringList EmbeddingWorkerPrivate::getIndexDocs(const QString &indexKey)
     return uniqueList;
 }
 
+bool EmbeddingWorkerPrivate::isSupportDoc(const QString &file)
+{
+    QFileInfo fileInfo(file);
+    QStringList suffixs;
+    suffixs << "txt"
+           << "doc"
+           << "docx"
+           << "xls"
+           << "xlsx"
+           << "ppt"
+           << "pptx"
+           << "pdf";
+
+    return suffixs.contains(fileInfo.suffix());
+}
+
+bool EmbeddingWorkerPrivate::initGrandSearchIndex()
+{
+    QString indexDirStr = workerDir() + QDir::separator() + kGrandVectorSearch;
+    QDir dir(indexDirStr);
+    //创建目录
+    if (!dir.exists()) {
+        if (!dir.mkpath(indexDirStr)) {
+            qWarning() << kGrandVectorSearch << " directory can't create!";
+            return false;
+        }
+    }
+    //创建表
+    embedder->createEmbedDataTable(kGrandVectorSearch);
+
+    return true;
+}
+
 EmbeddingWorker::EmbeddingWorker(QObject *parent)
     : QObject(parent),
       d(new EmbeddingWorkerPrivate(this))
@@ -224,6 +261,8 @@ EmbeddingWorker::~EmbeddingWorker()
         delete d->indexer;
         d->indexer = nullptr;
     }
+
+    //TODO:停止embeddding、已建索引落盘、数据存储等
 }
 
 void EmbeddingWorker::setEmbeddingApi(embeddingApi api, void *user)
@@ -231,17 +270,39 @@ void EmbeddingWorker::setEmbeddingApi(embeddingApi api, void *user)
     d->embedder->setEmbeddingApi(api, user);
 }
 
-void EmbeddingWorker::onFileCreated(const QString &file)
+void EmbeddingWorker::onDocCreate(const QString &file)
 {
-    qInfo() << "--------------file create------------" << file;
-    if (d->enableEmbedding(file)) {
+    qInfo() << file << "create****";
+
+    //过滤文档
+    if (!d->isSupportDoc(file)) {
+        qDebug() << "doc not support!";
         return;
     }
+    QStringList files(file);
+    QFuture<bool> future = QtConcurrent::run([files, this](){
+        return d->updateIndex(files, kGrandVectorSearch);
+    });
+    QFutureWatcher<bool> *futureWatcher = new QFutureWatcher<bool>(this);
+    QObject::connect(futureWatcher, &QFutureWatcher<QString>::finished, [futureWatcher, this](){
+        if (futureWatcher->future().result()) {
+            qInfo() << "Index update Success";
+            //Q_EMIT indexCreateSuccess(kGrandVectorSearch);
+        } else {
+            qInfo() << "Index update Failed";
+        }
+        futureWatcher->deleteLater();
+    });
+    futureWatcher->setFuture(future);
 }
 
-void EmbeddingWorker::onFileDeleted(const QString &file)
+void EmbeddingWorker::onDocDelete(const QString &file)
 {
-    qInfo() << "--------------file delete--------------" << file;
+    qInfo() << file << "delete*****";
+    if (!d->isSupportDoc(file)) {
+        qDebug() << "doc not support!";
+        return;
+    }
 }
 
 /*            [key] 知识库标识

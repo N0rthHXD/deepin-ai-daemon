@@ -44,6 +44,10 @@ public:
     QString indexDir(const QString &indexKey);
     QStringList getIndexDocs(const QString &indexKey);
 
+    bool isSupportDoc(const QString &file);
+
+    bool initGrandSearchIndex();
+
     Embedding *embedder {nullptr};
     VectorIndex *indexer {nullptr};
 

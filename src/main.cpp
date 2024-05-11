@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     analyzeServer.start();
 
     FileMonitor monitor;
-    monitor.start(QThread::InheritPriority, 60);
+    monitor.start(QThread::InheritPriority, 1);
 
     ResourceManager::instance()->setAutoReleaseMemory(true);
 

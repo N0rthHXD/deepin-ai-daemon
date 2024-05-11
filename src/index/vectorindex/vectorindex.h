@@ -10,6 +10,8 @@
 #include <QStandardPaths>
 
 #include <faiss/Index.h>
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexIDMap.h>
 
 class VectorIndex : public QObject
 {
@@ -29,7 +31,6 @@ public:
     void createIndexSegTable(const QString &key);
 
     QVector<faiss::idx_t> vectorSearch(int topK, const float *queryVector, const QString &indexKey);
-    QStringList loadTexts(const QVector<faiss::idx_t> &ids, const QString &indexKey);
 
     inline static QString workerDir()
     {
@@ -37,6 +38,12 @@ public:
                 + "/embedding";
         return workerDir;
     }
+
+signals:
+    void indexDump(const QString &indexKey);
+
+private slots:
+    void onIndexDump(const QString &indexKey);
 
 private:
     bool createFlatIndex(int d, const QVector<float> &embeddings, const QVector<faiss::idx_t> &ids, const QString &indexKey);
@@ -51,8 +58,13 @@ private:
 
     void removeDupIndex(const faiss::Index *index, int topK, int DupK, QVector<faiss::idx_t> &nonDupIndex,
                         const float *queryVector, QMap<float, bool> &seen);
-//    void processData(const faiss::idx_t );
 
+    QHash<QString, int> getIndexFilesNum(const QString &indexKey);
+
+    //faiss::IndexFlatL2 *flatIndex = nullptr;
+    //faiss::IndexIDMap *flatIndexIDMap = nullptr;  //Flat L2 index, id mapping
+
+    QHash<QString, faiss::IndexIDMap*> flatIndexHash;
 };
 
 #endif // VECTORINDEX_H

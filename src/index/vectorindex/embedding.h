@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QVector>
+#include <QHash>
 #include <QStandardPaths>
 
 #include <faiss/Index.h>
@@ -43,6 +44,7 @@ public:
     }
 public slots:
     void onIndexCreateSuccess(const QString &key);
+    void onIndexDump(const QString &key);
 
 private:
     void init();

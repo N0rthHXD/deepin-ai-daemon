@@ -224,6 +224,9 @@ int FileMonitor::handleMsgFromGenl(nl_msg *msg, void *arg)
     // TODO: file attribute change
     switch (act) {
     case ACT_NEW_FILE:
+        Q_EMIT monitor->indexManager->fileCreated(changedFile);
+        Q_EMIT monitor->indexManager->docCreate(changedFile);
+        break;
         //    case ACT_NEW_SYMLINK:
         //    case ACT_NEW_LINK:
         //    case ACT_NEW_FOLDER:
@@ -232,6 +235,9 @@ int FileMonitor::handleMsgFromGenl(nl_msg *msg, void *arg)
         Q_EMIT monitor->indexManager->fileCreated(changedFile);
         break;
     case ACT_DEL_FILE:
+        Q_EMIT monitor->indexManager->fileDeleted(changedFile);
+        Q_EMIT monitor->indexManager->docDelete(changedFile);
+        break;
     case ACT_DEL_FOLDER:
     case ACT_RENAME_FROM_FILE:
     case ACT_RENAME_FROM_FOLDER:

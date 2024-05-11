@@ -49,7 +49,8 @@ void Embedding::embeddingDocument(const QString &docFilePath, const QString &key
     chunks = textsSpliter(contents);
 
     //元数据、文本存储
-    int continueID = getDBLastID(key);  //datainfo 起始ID
+    //int continueID = getDBLastID(key);  //datainfo 起始ID
+    int continueID = embeddingIds.count() + getDBLastID(key);
     qInfo() << "-------------" << continueID;
 
     for (int i = 0; i < chunks.count(); i++) {
@@ -74,8 +75,7 @@ void Embedding::embeddingTexts(const QStringList &texts)
     if (texts.isEmpty())
         return;
 
-    QJsonObject emdObject;
-    emdObject = onHttpEmbedding(texts, apiData);
+    QJsonObject emdObject = onHttpEmbedding(texts, apiData);
 
     QJsonArray embeddingsArray = emdObject["embedding"].toArray();
     for(auto embeddingObject : embeddingsArray) {
@@ -150,8 +150,10 @@ int Embedding::getDBLastID(const QString &key)
 void Embedding::createEmbedDataTable(const QString &key)
 {
     QFuture<void> future =  QtConcurrent::run([key](){
-        QString createTableSQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBMetaDataTable) + " (id INTEGER PRIMARY KEY, source TEXT, content TEXT)";
-        return EmbedDBManagerIns->executeQuery(key + ".db", createTableSQL);
+        QString createTable1SQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBMetaDataTable) + " (id INTEGER PRIMARY KEY, source TEXT, content TEXT)";
+        QString createTable2SQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBIndexSegTable) + " (id INTEGER PRIMARY KEY, deleteBit TEXT, content TEXT)";
+        return EmbedDBManagerIns->executeQuery(key + ".db", createTable1SQL)
+               && EmbedDBManagerIns->executeQuery(key + ".db", createTable2SQL);
     });
     return future.waitForFinished();
 }
@@ -268,6 +270,15 @@ void Embedding::onIndexCreateSuccess(const QString &key)
     //批量插入metaData到数据库
     //[id、source、content]
     //组装SQL语句 列表 插入
+    if (!batchInsertDataToDB(insertSqlstrs, key)) {
+        qWarning() << "Insert DB failed.";
+    }
+
+    embeddingClear();
+}
+
+void Embedding::onIndexDump(const QString &key)
+{
     if (!batchInsertDataToDB(insertSqlstrs, key)) {
         qWarning() << "Insert DB failed.";
     }

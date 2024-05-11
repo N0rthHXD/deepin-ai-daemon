@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 UnionTech Software Technology Co., Ltd.
+﻿// SPDX-FileCopyrightText: 2024 UnionTech Software Technology Co., Ltd.
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -17,23 +17,22 @@
 #include <QNetworkReply>
 #include <QEventLoop>
 
-#include <faiss/IndexFlat.h>
 #include <faiss/IndexIVFPQ.h>
 #include <faiss/index_io.h>
 #include <faiss/index_factory.h>
 #include <faiss/utils/random.h>
-#include <faiss/IndexIDMap.h>
 #include <faiss/IndexShards.h>
 #include <faiss/IndexFlatCodes.h>
 
 VectorIndex::VectorIndex(QObject *parent)
+    :QObject (parent)
 {
-
+    init();
 }
 
 void VectorIndex::init()
 {
-
+    connect(this, &VectorIndex::indexDump, this, &VectorIndex::onIndexDump);
 }
 
 bool VectorIndex::createIndex(int d, const QVector<float> &embeddings, const QVector<faiss::idx_t> &ids, const QString &indexKey)
@@ -64,24 +63,42 @@ bool VectorIndex::createIndex(int d, const QVector<float> &embeddings, const QVe
 bool VectorIndex::updateIndex(int d, const QVector<float> &embeddings, const QVector<faiss::idx_t> &ids, const QString &indexKey)
 {
     if (embeddings.isEmpty())
-        return false;
+        return false;    
 
-    int n = embeddings.count() / d;
-    if (n != ids.count()) {
+    if (embeddings.count() / d != ids.count()) {
         qDebug() << "embedding error: vectors not equal ids.";
         return false;
     }
 
-    //TODO:会加载索引、消耗资源,存储信息到DB
-    int nTotal = getIndexNTotal(indexKey);
-
-    if (nTotal < 1000)
-        //小于1000个向量，直接Flat
-        return updateFlatIndex(d, embeddings, ids, indexKey);
-    else if (nTotal < 1000000) {
-        return updateIvfFlatIndex(d, embeddings, indexKey);
+    if (!flatIndexHash.contains(indexKey)) {
+        faiss::Index *index = faiss::index_factory(d, kFaissFlatIndex);
+        faiss::IndexIDMap *flatIndexIDMap = new faiss::IndexIDMap(index);
+        flatIndexHash.insert(indexKey, flatIndexIDMap);
     }
-    return false;
+    faiss::IndexIDMap *flatIndexIDMapTmp = flatIndexHash.value(indexKey);
+
+    int oldIndexTotal = flatIndexIDMapTmp->ntotal;
+    int n = embeddings.count() / d - oldIndexTotal;
+    QVector<float> embeddingsTmp = embeddings.mid(oldIndexTotal * d);
+    QVector<faiss::idx_t> idsTmp = ids.mid(oldIndexTotal * d);
+    flatIndexIDMapTmp->add_with_ids(n, embeddingsTmp.data(), idsTmp.data());
+
+    if (flatIndexIDMapTmp->ntotal >= 2) {
+        // UOS-AI添加文档后在内存中，与已经落盘的区分开，手动操作落盘；整理索引碎片等操作。
+        Q_EMIT indexDump(indexKey);
+    }
+    return true;
+
+    //TODO:会加载索引、消耗资源,存储信息到DB
+//    int nTotal = getIndexNTotal(indexKey);
+
+//    if (nTotal < 1000)
+//        //小于1000个向量，直接Flat
+//        return updateFlatIndex(d, embeddings, ids, indexKey);
+//    else if (nTotal < 1000000) {
+//        return updateIvfFlatIndex(d, embeddings, indexKey);
+//    }
+
 
     //faiss::Index *newIndex = faiss::index_factory(d, "Flat");
     //faiss::IndexFlat *newIndex = new faiss::IndexFlat(d);
@@ -120,7 +137,8 @@ bool VectorIndex::saveIndexToFile(const faiss::Index *index, const QString &inde
         qWarning() << indexKey << " directory isn't exists and can't create!";
         return false;
     }
-    QString indexPath = indexDir.path() + QDir::separator() + indexType + ".faiss";
+    QHash<QString, int> indexFilesNum = getIndexFilesNum(indexKey);
+    QString indexPath = indexDir.path() + QDir::separator() + indexType + "_" + QString::number(indexFilesNum.value(indexType) + 1) + ".faiss";
     qInfo() << "index file save to " + indexPath;
 
     try {
@@ -175,33 +193,10 @@ QVector<faiss::idx_t> VectorIndex::vectorSearch(int topK, const float *queryVect
     return I1;
 }
 
-QStringList VectorIndex::loadTexts(const QVector<faiss::idx_t> &ids, const QString &indexKey)
+void VectorIndex::onIndexDump(const QString &indexKey)
 {
-    QStringList docFilePaths;
-    QStringList texts;
-
-    QString dataInfoPath = workerDir() + QDir::separator() + indexKey + kDataInfo;
-    QFile dataInfoFile(dataInfoPath);
-    if (!dataInfoFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qDebug() << "Failed to open data info file.";
-        return {};
-    }
-
-    QByteArray jsonData = dataInfoFile.readAll();
-    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonData);
-
-    if (jsonDoc.isNull()) {
-        qDebug() << "Failed to parse JSON file.";
-        return {};
-    }
-
-    QJsonObject dataInfoJson = jsonDoc.object();
-    for (faiss::idx_t id : ids) {
-        QJsonObject contentObj = dataInfoJson.value(QString::number(id)).toObject();
-        docFilePaths.append(contentObj["docFilePath"].toString());
-        texts.append(contentObj["text"].toString());
-    }
-    return texts;
+    saveIndexToFile(flatIndexHash.value(indexKey), indexKey, kFaissFlatIndex);
+    flatIndexHash.remove(indexKey);
 }
 
 bool VectorIndex::createFlatIndex(int d, const QVector<float> &embeddings, const QVector<faiss::idx_t> &ids, const QString &indexKey)
@@ -280,4 +275,29 @@ void VectorIndex::removeDupIndex(const faiss::Index *index, int topK, int DupK, 
     }
     DupK += topK - nonDupIndex.count();
     removeDupIndex(index, topK, DupK, nonDupIndex, queryVector, seen);
+}
+
+QHash<QString, int> VectorIndex::getIndexFilesNum(const QString &indexKey)
+{
+    QHash<QString, int> result;
+
+    QString indexDirStr = workerDir() + QDir::separator() + indexKey;
+    QDir indexDir(indexDirStr);
+    if (!indexDir.exists()) {
+        qWarning() << indexKey << " directory isn't exists!";
+        return {};
+    }
+
+    QFileInfoList fileList = indexDir.entryInfoList(QDir::Files);
+
+    for (QString indexTypeKey : {kFaissFlatIndex, kFaissIvfFlatIndex, kFaissIvfPQIndex}) {
+        int count = 0;
+        for (const QFileInfo& fileInfo : fileList) {
+            QString fileName = fileInfo.fileName();
+            if (fileName.contains(indexTypeKey))
+                count += 1;
+            result.insert(indexTypeKey, count);
+        }
+    }
+    return result;
 }

@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QSharedPointer>
 #include <QStandardPaths>
+#include <QVector>
 
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
@@ -65,6 +66,7 @@ private:
     //faiss::IndexIDMap *flatIndexIDMap = nullptr;  //Flat L2 index, id mapping
 
     QHash<QString, faiss::IndexIDMap*> flatIndexHash;
+    QVector<faiss::idx_t> segmentIds;
 };
 
 #endif // VECTORINDEX_H

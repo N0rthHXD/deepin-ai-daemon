@@ -46,8 +46,6 @@ public:
 
     bool isSupportDoc(const QString &file);
 
-    bool initGrandSearchIndex();
-
     Embedding *embedder {nullptr};
     VectorIndex *indexer {nullptr};
 

@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QVector>
 #include <QHash>
+#include <QMap>
 #include <QStandardPaths>
 
 #include <faiss/Index.h>
@@ -42,6 +43,8 @@ public:
         onHttpEmbedding = api;
         apiData = user;
     }
+
+    void deleteIDFromFiles(const QStringList &files);
 public slots:
     void onIndexCreateSuccess(const QString &key);
     void onIndexDump(const QString &key);
@@ -57,6 +60,9 @@ private:
     QVector<faiss::idx_t> embeddingIds;
     QStringList insertSqlstrs;
     bool isStop = false;
+
+    QHash<faiss::idx_t, QString> idFilesHash;
+//    QMap<faiss::idx_t, float*> embeddingData;
 };
 
 #endif // EMBEDDING_H

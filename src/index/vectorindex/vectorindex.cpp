@@ -4,6 +4,7 @@
 
 #include "vectorindex.h"
 #include "../global_define.h"
+#include "database/embeddatabase.h"
 
 #include <QList>
 #include <QFile>
@@ -12,7 +13,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-
+#include <QFuture>
+#include <QtConcurrent/QtConcurrent>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QEventLoop>
@@ -80,8 +82,10 @@ bool VectorIndex::updateIndex(int d, const QVector<float> &embeddings, const QVe
     int oldIndexTotal = flatIndexIDMapTmp->ntotal;
     int n = embeddings.count() / d - oldIndexTotal;
     QVector<float> embeddingsTmp = embeddings.mid(oldIndexTotal * d);
-    QVector<faiss::idx_t> idsTmp = ids.mid(oldIndexTotal * d);
+    QVector<faiss::idx_t> idsTmp = ids.mid(oldIndexTotal);
     flatIndexIDMapTmp->add_with_ids(n, embeddingsTmp.data(), idsTmp.data());
+
+    segmentIds += idsTmp;   //每个segment的索引所对应的IDs
 
     if (flatIndexIDMapTmp->ntotal >= 2) {
         // UOS-AI添加文档后在内存中，与已经落盘的区分开，手动操作落盘；整理索引碎片等操作。
@@ -138,8 +142,25 @@ bool VectorIndex::saveIndexToFile(const faiss::Index *index, const QString &inde
         return false;
     }
     QHash<QString, int> indexFilesNum = getIndexFilesNum(indexKey);
-    QString indexPath = indexDir.path() + QDir::separator() + indexType + "_" + QString::number(indexFilesNum.value(indexType) + 1) + ".faiss";
+    QString indexName = indexType + "_" + QString::number(indexFilesNum.value(indexType) + 1) + ".faiss";
+    QString indexPath = indexDir.path() + QDir::separator() + indexName;
     qInfo() << "index file save to " + indexPath;
+
+    QStringList insertStrs;
+    for (faiss::idx_t id : segmentIds) {
+        QString insert = "INSERT INTO " + QString(kEmbeddingDBIndexSegTable)
+                + " (id, " + QString(kEmbeddingDBSegIndexTableBitSet)
+                + ", " + QString(kEmbeddingDBSegIndexIndexName) + ") " + "VALUES ("
+                + QString::number(id) + ", " + "1" + ", '" + indexName + "')";
+        insertStrs << insert;
+    }
+    QFuture<void> future =  QtConcurrent::run([indexKey, insertStrs](){
+        QString query = "SELECT id FROM " + QString(kEmbeddingDBMetaDataTable) + " ORDER BY id DESC LIMIT 1";
+        return EmbedDBManagerIns->commitTransaction(indexKey + ".db", insertStrs);
+    });
+    future.waitForFinished();
+
+    segmentIds.clear();
 
     try {
         faiss::write_index(index, indexPath.toStdString().c_str());
@@ -196,6 +217,7 @@ QVector<faiss::idx_t> VectorIndex::vectorSearch(int topK, const float *queryVect
 void VectorIndex::onIndexDump(const QString &indexKey)
 {
     saveIndexToFile(flatIndexHash.value(indexKey), indexKey, kFaissFlatIndex);
+
     flatIndexHash.remove(indexKey);
 }
 

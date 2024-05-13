@@ -23,6 +23,9 @@ static constexpr char kEmbeddingDBMetaDataTableID[] { "id" };
 static constexpr char kEmbeddingDBMetaDataTableSource[] { "source" };
 static constexpr char kEmbeddingDBMetaDataTableContent[] { "content" };
 
+static constexpr char kEmbeddingDBSegIndexTableBitSet[] { "deleteBit" };
+static constexpr char kEmbeddingDBSegIndexIndexName[] { "content" };
+
 //index define
 static constexpr char kFaissFlatIndex[] { "Flat" };
 static constexpr char kFaissIvfFlatIndex[] { "IvfFlat" };

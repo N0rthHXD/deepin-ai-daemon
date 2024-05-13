@@ -63,6 +63,9 @@ void Embedding::embeddingDocument(const QString &docFilePath, const QString &key
 
         //IDS添加
         embeddingIds << continueID;
+
+        idFilesHash.insert(continueID, docFilePath);
+
         continueID += 1;
     }
     //向量化文本块，生成向量vector
@@ -140,7 +143,6 @@ int Embedding::getDBLastID(const QString &key)
         QString query = "SELECT id FROM " + QString(kEmbeddingDBMetaDataTable) + " ORDER BY id DESC LIMIT 1";
         return EmbedDBManagerIns->executeQuery(key + ".db", query, result);
     });
-
     future.waitForFinished();
     if (result.isEmpty() || !result[0]["id"].isValid())
         return 0;
@@ -149,9 +151,10 @@ int Embedding::getDBLastID(const QString &key)
 
 void Embedding::createEmbedDataTable(const QString &key)
 {
+    qInfo() << "create DB table *****";
     QFuture<void> future =  QtConcurrent::run([key](){
         QString createTable1SQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBMetaDataTable) + " (id INTEGER PRIMARY KEY, source TEXT, content TEXT)";
-        QString createTable2SQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBIndexSegTable) + " (id INTEGER PRIMARY KEY, deleteBit TEXT, content TEXT)";
+        QString createTable2SQL = "CREATE TABLE IF NOT EXISTS " + QString(kEmbeddingDBIndexSegTable) + " (id INTEGER PRIMARY KEY, deleteBit INTEGER, content TEXT)";
         return EmbedDBManagerIns->executeQuery(key + ".db", createTable1SQL)
                && EmbedDBManagerIns->executeQuery(key + ".db", createTable2SQL);
     });
@@ -263,6 +266,18 @@ QStringList Embedding::loadTextsFromIndex(const QVector<faiss::idx_t> &ids, cons
         }
     }
     return texts;
+}
+
+void Embedding::deleteIDFromFiles(const QStringList &files)
+{
+    if (files.isEmpty())
+        return;
+
+    for (auto it : idFilesHash.keys()) {
+        if (files.contains(idFilesHash.value(it)))
+            idFilesHash.remove(it);
+        //delete ID 删除ID，和对应的embeddings，保证一致性、然后落盘
+    }
 }
 
 void Embedding::onIndexCreateSuccess(const QString &key)

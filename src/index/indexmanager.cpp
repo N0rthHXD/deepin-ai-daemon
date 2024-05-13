@@ -40,11 +40,12 @@ IndexManager::~IndexManager()
 
 void IndexManager::init()
 {
-    connect(this, &IndexManager::createAllIndex, worker.data(), &IndexWorker::onCreateAllIndex);
+    //connect(this, &IndexManager::createAllIndex, worker.data(), &IndexWorker::onCreateAllIndex);
     connect(this, &IndexManager::fileCreated, worker.data(), &IndexWorker::onFileCreated);
     connect(this, &IndexManager::fileAttributeChanged, worker.data(), &IndexWorker::onFileAttributeChanged);
     connect(this, &IndexManager::fileDeleted, worker.data(), &IndexWorker::onFileDeleted);
 
+    connect(this, &IndexManager::createAllIndex, embeddingWorker.data(), &EmbeddingWorker::onCreateAllIndex);
     connect(this, &IndexManager::docCreate, embeddingWorker.data(), &EmbeddingWorker::onDocCreate);
     connect(this, &IndexManager::docDelete, embeddingWorker.data(), &EmbeddingWorker::onDocDelete);
 

@@ -31,6 +31,7 @@ public Q_SLOTS:
     //void onFileAttributeChanged(const QString &file);
     void onDocCreate(const QString &file);
     void onDocDelete(const QString &file);
+    void onCreateAllIndex();
 
     bool doCreateIndex(const QStringList &files, const QString &key);
     bool doUpdateIndex(const QStringList &files, const QString &key);
